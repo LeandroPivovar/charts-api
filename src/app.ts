@@ -1,0 +1,30 @@
+import fastify from 'fastify'
+import jwt from '@fastify/jwt'
+import dotenv from 'dotenv';
+import routes from './router'
+dotenv.config();
+
+const server = fastify()
+
+server.register(jwt, {
+  secret: 'supersecretkey'
+})
+
+server.decorate("authenticate", async function (request, reply) {
+  try {
+    await request.jwtVerify()
+  } catch (err) {
+    console.log(err)
+    reply.code(401).send({ error: 'Token inválido ou ausente' })
+  }
+})
+
+server.register(routes);
+
+server.listen({ port: Number(process.env.SERVER_PORT || 8080) }, (err, address) => {
+  if (err) {
+    console.error(err)
+    process.exit(1)
+  }
+  console.log(`Server listening at ${address}`)
+})
