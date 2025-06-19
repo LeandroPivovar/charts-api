@@ -2,6 +2,7 @@ import fastify from 'fastify'
 import jwt from '@fastify/jwt'
 import dotenv from 'dotenv';
 import routes from './router'
+import cors from '@fastify/cors';
 dotenv.config();
 
 const server = fastify()
@@ -9,6 +10,10 @@ const server = fastify()
 server.register(jwt, {
   secret: 'supersecretkey'
 })
+
+server.register(cors, {
+  origin: '*'
+});
 
 server.decorate("authenticate", async function (request, reply) {
   try {

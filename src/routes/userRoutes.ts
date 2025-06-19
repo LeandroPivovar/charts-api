@@ -10,5 +10,4 @@ export default async function userRoutes(fastify: FastifyInstance) {
     fastify.post('/', userController.createUser)
 
     fastify.put('/',{preHandler: [fastify.authenticate]}, userController.editUser)
-
 }

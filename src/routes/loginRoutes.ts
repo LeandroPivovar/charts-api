@@ -12,22 +12,30 @@ export default async function loginRoutes(fastify: FastifyInstance) {
         const loginUserSchema = z.object({
             mail: z.string().email(),
             password: z.string().min(6)
-        })
+        });
 
-        const {mail, password} = loginUserSchema.parse(request.body)
-        const userInfos = await db("users").select(['id', 'name', 'username', 'status', 'role']).where({
-            mail: mail,
-            password: password,
-        })
+        const { mail, password } = loginUserSchema.parse(request.body);
 
-        const user = userInfos[0];
-        
-        if(user.status == 'pending'){
-            reply.code(401).send({'error': 'Seu perfil esta sendo analisado pelos administradores'})
+        const userInfos = await db("users").select(['id', 'name', 'username', 'status', 'role', 'password']).where({ mail });
+
+        if (userInfos.length === 0) {
+            return reply.code(401).send({ error: 'E-mail ou senha inválidos' });
         }
 
-        const token = fastify.jwt.sign({userInfos}, {expiresIn: process.env.JWT_EXPIRATION_TIME})
+        const user = userInfos[0];
 
-        reply.code(200).send(token)
-    })
+        if (user.password !== password) {
+            return reply.code(401).send({ error: 'E-mail ou senha inválidos' });
+        }
+
+        if (user.status === 'pending') {
+            return reply.code(401).send({ error: 'Seu perfil está sendo analisado pelos administradores' });
+        }
+
+        const { password: _, ...userWithoutPassword } = user;
+
+        const token = fastify.jwt.sign({ user: userWithoutPassword }, { expiresIn: process.env.JWT_EXPIRATION_TIME });
+
+        return reply.code(200).send({ token });
+    });
 }
