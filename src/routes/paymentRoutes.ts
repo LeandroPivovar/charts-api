@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import z from 'zod';
 import db from '../db/database';
 
@@ -7,7 +7,7 @@ dotenv.config();
 
 export default async function paymentRoutes(fastify: FastifyInstance) {
     
-    fastify.post('/', {preHandler: [fastify.authenticate]}, async (request, reply) => {
+    fastify.post('/', {preHandler: [fastify.authenticate]}, async (request: FastifyRequest, reply: FastifyReply) => {
         //IMPLEMENTAR LÓGICA DE PAGAMENTO REAL
         await request.jwtVerify();
 
@@ -36,7 +36,7 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
     })
 
       
-    fastify.get('/:id', {preHandler: [fastify.authenticate]}, async (request, reply) => {
+    fastify.get('/:id', {preHandler: [fastify.authenticate]}, async (request: FastifyRequest, reply: FastifyReply) => {
         const { id } = request.params as { id: string };
 
         const payment = await db('payments').select(['user_id', 'description', 'value', 'status', 'qrcode', 'external_reference', 'copy_paste']).where({id})

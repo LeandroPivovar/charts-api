@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart from '@fastify/multipart';
 import fs from 'fs/promises';
 import path from 'path';
@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 export default async function geminiRoute(fastify: FastifyInstance) {
   fastify.register(multipart);
 
-  fastify.post('/', async (request, reply) => {
+  fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const file = await request.file();
 
     if (!file?.mimetype?.startsWith('image/')) {

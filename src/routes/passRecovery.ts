@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import z from 'zod';
 import db from '../db/database';
 import bcrypt from 'bcryptjs';
@@ -8,7 +8,7 @@ dotenv.config();
 
 export default async function passwordRecoveryRoutes(fastify: FastifyInstance) {
     
-    fastify.get('/', {preHandler: [fastify.authenticate]}, async (request, reply) => {
+    fastify.get('/', {preHandler: [fastify.authenticate]}, async (request: FastifyRequest, reply: FastifyReply) => {
         await request.jwtVerify();
 
         const token = Math.floor(1000 + Math.random() * 9000).toString();
@@ -28,7 +28,7 @@ export default async function passwordRecoveryRoutes(fastify: FastifyInstance) {
 
     })
 
-fastify.post('/', async (request, reply) => {
+fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
         const resetPasswordSchema = z.object({
             token: z.string().length(4, 'O token deve ter exatamente 4 dígitos.'),

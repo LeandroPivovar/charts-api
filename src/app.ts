@@ -15,7 +15,7 @@ server.register(cors, {
   origin: '*'
 });
 
-server.decorate("authenticate", async function (request, reply) {
+server.decorate("authenticate", async function (request: FastifyRequest, reply: FastifyReply) {
   try {
     await request.jwtVerify()
   } catch (err) {

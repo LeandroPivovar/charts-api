@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import z from 'zod';
 import db from '../db/database';
 
@@ -7,7 +7,7 @@ dotenv.config();
 
 export default async function loginRoutes(fastify: FastifyInstance) {
     
-    fastify.post('/', async (request, reply) => {
+    fastify.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
 
         const loginUserSchema = z.object({
             mail: z.string().email(),
