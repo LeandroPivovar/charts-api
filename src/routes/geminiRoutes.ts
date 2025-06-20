@@ -94,7 +94,7 @@ Retorne apenas o JSON, sem explicações, comentários ou formatação extra.
     } else if (AI_PROVIDER === 'CHATGPT') {
       // Corpo da requisição para ChatGPT
       const chatGPTBody = {
-        model: 'gpt-4o-mini', // ou outro modelo que usar
+        model: 'gpt-4o', // ou outro modelo que usar
         messages: [
           { role: 'system', content: 'Você é o melhor day trader brasileiro.' },
           { role: 'user', content: prompt },
