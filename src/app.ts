@@ -3,6 +3,11 @@ import jwt from '@fastify/jwt'
 import dotenv from 'dotenv';
 import routes from './router'
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const server = fastify()
@@ -25,6 +30,11 @@ server.decorate("authenticate", async function (request: FastifyRequest, reply: 
 })
 
 server.register(routes);
+
+server.register(fastifyStatic, {
+  root: path.resolve(__dirname, 'public'),
+  prefix: '/',
+});
 
 server.listen({ port: Number(process.env.SERVER_PORT || 8080), host: '0.0.0.0' }, (err, address) => {
   if (err) {
