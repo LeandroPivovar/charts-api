@@ -1,4 +1,4 @@
-import fastify from 'fastify'
+import fastify, { FastifyReply, FastifyRequest } from 'fastify'
 import jwt from '@fastify/jwt'
 import dotenv from 'dotenv';
 import routes from './router'
