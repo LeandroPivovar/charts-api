@@ -29,8 +29,8 @@ Você é o melhor day trader brasileiro. Analise o gráfico na imagem e retorne 
   "description": "descrição breve da análise",
   "action": "COMPRA" ou "VENDA",
   "percentage": número,  // confiança na recomendação em %
-  "stopLoss": número,    // preço para stop loss
-  "takeProfit": número,  // preço para take profit
+  "stopLoss": número,    // porcentagem 
+  "takeProfit": número,  // porcentagem
   "riskReward": número,  // relação risco/retorno
   "analysis": {
     "pattern": "descrição do padrão gráfico",
