@@ -4,58 +4,78 @@ import db from '../db/database';
 import fetch from 'node-fetch';
 
 export default async function extensionRoutes(fastify: FastifyInstance) {
+  // Endpoint de teste para validação de imagens
+  fastify.post('/test-image', async (request, reply) => {
+    const { image } = request.body as { image: string };
+    const base64Data = image.includes(',') ? image.split(',')[1] : image;
+    
+    return {
+      length: base64Data.length,
+      isValid: /^[A-Za-z0-9+/=]+$/.test(base64Data),
+      firstChars: base64Data.substring(0, 20) + '...'
+    };
+  });
+
+  // Endpoint principal de análise
   fastify.post('/', async (request, reply) => {
-    // 1. Validação dos dados de entrada
+    // 1. Schema de validação com mensagens claras
     const schema = z.object({
-      email: z.string().email(),
-      password: z.string().min(6),
-      image: z.string().refine((val) => {
-        const base64Data = val.includes(',') ? val.split(',')[1] : val;
-        return base64Data.length > 1000 && /^[A-Za-z0-9+/=]+$/.test(base64Data);
-      }, {
-        message: 'Imagem deve ser um Base64 válido com pelo menos 1KB de dados'
-      }),
+      email: z.string().email({ message: 'E-mail inválido' }),
+      password: z.string().min(6, { message: 'Senha deve ter no mínimo 6 caracteres' }),
+      image: z.string()
+        .min(100, { message: 'Imagem muito pequena' })
+        .refine((val) => {
+          const base64Data = val.includes(',') ? val.split(',')[1] : val;
+          return /^[A-Za-z0-9+/=]+$/.test(base64Data);
+        }, { message: 'Formato Base64 inválido' })
+        .refine((val) => {
+          const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+          if (!val.startsWith('data:image')) return true; // Aceita Base64 puro
+          const mimeType = val.split(';')[0].replace('data:', '');
+          return validTypes.includes(mimeType);
+        }, { message: 'Tipo de imagem não suportado (use PNG, JPEG ou WebP)' })
     });
 
     try {
+      // 2. Validação dos dados de entrada
       const { email, password, image } = schema.parse(request.body);
 
-      // 2. Autenticação do usuário
+      // 3. Autenticação do usuário
       const user = await db('users')
         .where({ mail: email, password, status: 'active' })
         .first();
 
       if (!user) {
-        return reply.code(401).send({ error: 'Usuário ou senha inválidos' });
+        return reply.code(401).send({ 
+          error: 'Falha na autenticação',
+          details: 'Verifique seu e-mail e senha' 
+        });
       }
 
-      // 3. Preparação do prompt e dados da imagem
+      // 4. Configuração do prompt de análise
       const prompt = `
-Você é o melhor day trader brasileiro. Analise o gráfico na imagem e retorne um JSON estrito com os seguintes campos:
+Você é um especialista em análise técnica de mercados financeiros. Analise o gráfico fornecido e retorne um JSON estrito com:
 
 {
-  "description": "descrição breve da análise",
-  "action": "COMPRA" ou "VENDA",
-  "percentage": número,  // confiança na recomendação em %
-  "stopLoss": número,    // preço para stop loss
-  "takeProfit": número,  // preço para take profit
-  "riskReward": número,  // relação risco/retorno
-  "analysis": {
-    "pattern": "descrição do padrão gráfico",
-    "trend": "descrição da tendência",
-    "volume": "descrição do volume",
-    "support": "valor do suporte",
-    "resistance": "valor da resistência"
-  }
+  "description": "Análise resumida",
+  "action": "COMPRA|VENDA|NEUTRO",
+  "confidence": 0-100, // Nível de confiança
+  "keyLevels": {
+    "support": [valores],
+    "resistance": [valores]
+  },
+  "timeframe": "TEMPO_RECOMMENDADO",
+  "riskReward": "X:Y",
+  "observations": ["lista", "de", "padrões"]
 }
 
-Retorne apenas o JSON, sem explicações, comentários ou formatação extra.
+Retorne APENAS o JSON válido, sem comentários ou markdown.
 `.trim();
 
+      // 5. Processamento com o provedor de IA
       const AI_PROVIDER = process.env.AI_PROVIDER?.toUpperCase() || 'GEMINI';
       const cleanedImage = image.includes(',') ? image.split(',')[1] : image;
 
-      // 4. Processamento com o provedor de IA selecionado
       if (AI_PROVIDER === 'GEMINI') {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${process.env.GOOGLE_API_KEY}`,
@@ -68,28 +88,25 @@ Retorne apenas o JSON, sem explicações, comentários ou formatação extra.
                   { text: prompt },
                   { 
                     inlineData: {
-                      mimeType: 'image/png',
+                      mimeType: image.startsWith('data:') 
+                        ? image.split(';')[0].replace('data:', '') 
+                        : 'image/png',
                       data: cleanedImage
                     }
                   }
                 ]
-              }]
+              }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 1000
+              }
             })
           }
         );
 
         const result = await response.json();
-
-        if (!response.ok) {
-          console.error('Erro Gemini:', result);
-          return reply.code(500).send({ 
-            error: 'Erro ao consultar Gemini',
-            details: result.error?.message || 'Erro desconhecido'
-          });
-        }
-
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        return parseAndSendResponse(text, reply);
+        if (!response.ok) throw new Error(`Gemini: ${result.error?.message || 'Erro desconhecido'}`);
+        return parseAIResponse(result.candidates?.[0]?.content?.parts?.[0]?.text, reply);
 
       } else if (AI_PROVIDER === 'CHATGPT') {
         const response = await fetch(
@@ -109,72 +126,67 @@ Retorne apenas o JSON, sem explicações, comentários ou formatação extra.
                   {
                     type: 'image_url',
                     image_url: {
-                      url: `data:image/png;base64,${image}`
+                      url: image.startsWith('data:') ? image : `data:image/png;base64,${image}`
                     }
                   }
                 ]
               }],
-              max_tokens: 800,
-              temperature: 0.5,
+              max_tokens: 1000,
+              temperature: 0.2,
               response_format: { type: 'json_object' }
             })
           }
         );
 
         const result = await response.json();
-
-        if (!response.ok) {
-          console.error('Erro ChatGPT:', result);
-          return reply.code(500).send({
-            error: 'Erro ao consultar ChatGPT',
-            details: result.error?.message || 'Erro desconhecido'
-          });
-        }
-
-        const text = result.choices?.[0]?.message?.content ?? '';
-        return parseAndSendResponse(text, reply);
+        if (!response.ok) throw new Error(`ChatGPT: ${result.error?.message || 'Erro desconhecido'}`);
+        return parseAIResponse(result.choices?.[0]?.message?.content, reply);
 
       } else {
-        return reply.code(400).send({
-          error: 'Provedor AI inválido',
-          details: `Configure AI_PROVIDER como GEMINI ou CHATGPT no .env (atual: ${AI_PROVIDER})`
-        });
+        throw new Error(`Provedor não suportado: ${AI_PROVIDER}`);
       }
 
     } catch (error) {
-      console.error('Erro no servidor:', error);
+      console.error('Erro no processamento:', error);
       
       if (error instanceof z.ZodError) {
         return reply.code(400).send({
           error: 'Dados inválidos',
-          details: error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+          details: error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message
+          }))
         });
       }
 
       return reply.code(500).send({
-        error: 'Erro interno no servidor',
-        details: error instanceof Error ? error.message : 'Erro desconhecido'
+        error: 'Erro no processamento',
+        details: error instanceof Error ? error.message : 'Erro desconhecido',
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   });
-}
 
-// Função auxiliar para processar a resposta da IA
-async function parseAndSendResponse(text: string, reply: any) {
-  try {
-    // Tenta extrair JSON de markdown ou parse direto
-    const match = text.match(/(?:```json\s*)?({[\s\S]*?})(?:\s*```)?/i);
-    const jsonString = match ? match[1] : text;
-    const parsed = JSON.parse(jsonString);
+  // Função auxiliar para parsear respostas da IA
+  async function parseAIResponse(text: string | undefined, reply: any) {
+    if (!text) throw new Error('Resposta vazia da IA');
     
-    return reply.send({ resultado: parsed });
-    
-  } catch (parseError) {
-    console.error('Erro ao parsear resposta:', parseError, 'Texto:', text);
-    return reply.code(500).send({
-      error: 'Erro ao processar resposta da IA',
-      details: 'A resposta não continha um JSON válido',
-      rawResponse: text
-    });
+    try {
+      // Extrai JSON de markdown ou parse direto
+      const jsonMatch = text.match(/(?:```json\s*)?({[\s\S]+?})(?:\s*```)?/i);
+      const jsonString = jsonMatch ? jsonMatch[1] : text;
+      const result = JSON.parse(jsonString);
+      
+      // Validação básica da estrutura
+      if (!result.action || !result.keyLevels) {
+        throw new Error('Resposta da IA não contém estrutura esperada');
+      }
+      
+      return reply.send(result);
+      
+    } catch (parseError) {
+      console.error('Falha ao parsear:', text);
+      throw new Error(`Falha ao processar resposta da IA: ${parseError instanceof Error ? parseError.message : 'Formato inválido'}`);
+    }
   }
 }
